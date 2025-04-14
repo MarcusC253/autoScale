@@ -111,24 +111,8 @@ pipeline {
         }
         */
 
-        stage('Initialize Terraform') {
-            steps {
-                script {
-                    sh '''
-                        mkdir -p /tmp/bin
+        unzip -o /tmp/terraform.zip -d /tmp/bin
 
-                        if ! command -v terraform &> /dev/null; then
-                            echo "Terraform not found. Installing..."
-                            curl -fsSL https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip -o /tmp/terraform.zip
-                            unzip /tmp/terraform.zip -d /tmp/bin
-                            rm /tmp/terraform.zip
-                        fi
-
-                        terraform init
-                    '''
-                }
-            }
-        }
 
         stage('Plan Terraform') {
             steps {
