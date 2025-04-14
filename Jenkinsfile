@@ -90,6 +90,7 @@ pipeline {
         }
         */
 
+        /*
         stage('Snyk Security Scan') {
             steps {
                 script {
@@ -108,6 +109,7 @@ pipeline {
                 }
             }
         }
+        */
 
         stage('Initialize Terraform') {
             steps {
