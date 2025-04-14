@@ -5,7 +5,7 @@ pipeline {
         SONARQUBE_URL = "https://sonarcloud.io"
         TRUFFLEHOG_PATH = "/usr/local/bin/trufflehog3"
         JIRA_SITE = "https://derrickweil.atlassian.net"
-        JIRA_PROJECT = "SCRUM" // Your Jira project key
+        JIRA_PROJECT = "SCRUM"
     }
 
     stages {
@@ -23,12 +23,29 @@ pipeline {
             }
         }
 
-       
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/MarcusC253/autoScale.git'
+            }
+        }
+
+        stage('Secret Scanning with TruffleHog') {
+            steps {
+                script {
+                    sh """
+                        if ! command -v trufflehog &> /dev/null
+                        then
+                            echo 'TruffleHog not found! Installing...'
+                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sudo sh -s -- -b /usr/local/bin
+                        fi
+
+                        echo 'Running TruffleHog Scan...'
+                        trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
+                    """
                 }
             }
         }
-    }
-        // Security Scans
+
         stage('Static Code Analysis (SAST)') {
             steps {
                 script {
@@ -49,7 +66,6 @@ pipeline {
             }
         }
 
-
         stage('Snyk Security Scan') {
             steps {
                 script {
@@ -61,15 +77,11 @@ pipeline {
             }
         }
 
-
         stage('Initialize Terraform') {
             steps {
-                sh '''
-                terraform init
-                '''
+                sh 'terraform init'
             }
         }
-
 
         stage('Plan Terraform') {
             steps {
@@ -102,28 +114,24 @@ pipeline {
             }
         }
 
-
-    
-
         stage('Terraform Destroy') {
-        steps {
-            script {
-                input message: 'Are you sure you want to destroy the infrastructure?', ok: 'Proceed with Destroy'
-
-                 withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'devops253'
-                ]]) {
-                    sh '''
-                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-                    terraform destroy -auto-approve
-                    '''
-                }
+            steps {
+                script {
+                    input message: 'Are you sure you want to destroy the infrastructure?', ok: 'Proceed with Destroy'
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'devops253'
+                    ]]) {
+                        sh '''
+                        export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                        export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+                        terraform destroy -auto-approve
+                        '''
+                    }
                 }
             }
         }
-    }   
+    }
 
     post {
         success {
