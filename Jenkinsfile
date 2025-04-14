@@ -1,32 +1,28 @@
 pipeline {
     agent any
+
     environment {
         AWS_REGION = 'us-east-1'
         SONARQUBE_URL = "https://sonarcloud.io"
-        TRUFFLEHOG_PATH = "/usr/local/bin/trufflehog3"
         JIRA_SITE = "https://derrickweil.atlassian.net"
         JIRA_PROJECT = "SCRUM"
     }
 
-    stage('Secret Scanning with TruffleHog') {
-    steps {
-        script {
-            sh '''
-                mkdir -p /home/jenkins/bin
+    stages {
 
-                if ! command -v trufflehog &> /dev/null
-                then
-                    echo 'TruffleHog not found! Installing...'
-                    curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /home/jenkins/bin
-                fi
-
-                echo 'Running TruffleHog Scan...'
-                PATH="/home/jenkins/bin:$PATH" trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
-            '''
+        stage('Set AWS Credentials') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'devops253' 
+                ]]) {
+                    sh '''
+                    echo "AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"
+                    aws sts get-caller-identity
+                    '''
+                }
+            }
         }
-    }
-}
-
 
         stage('Checkout Code') {
             steps {
@@ -37,16 +33,18 @@ pipeline {
         stage('Secret Scanning with TruffleHog') {
             steps {
                 script {
-                    sh """
+                    sh '''
+                        mkdir -p /home/jenkins/bin
+
                         if ! command -v trufflehog &> /dev/null
                         then
                             echo 'TruffleHog not found! Installing...'
-                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /home/jenkins/bin
                         fi
 
                         echo 'Running TruffleHog Scan...'
-                        trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
-                    """
+                        PATH="/home/jenkins/bin:$PATH" trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
+                    '''
                 }
             }
         }
@@ -63,7 +61,21 @@ pipeline {
                             -Dsonar.login=''' + SONAR_TOKEN, returnStatus: true)
 
                         if (scanStatus != 0) {
-                            createJiraTicket("Static Code Analysis Failed", "SonarQube scan detected issues in your code.")
+                            echo "Creating Jira ticket for SAST failure..."
+                            sh '''
+                            curl -X POST -H "Content-Type: application/json" \
+                            -u $JIRA_USERNAME:$JIRA_API_TOKEN \
+                            --data '{
+                              "fields": {
+                                "project": { "key": "'"$JIRA_PROJECT"'" },
+                                "summary": "Static Code Analysis Failed",
+                                "description": "SonarQube scan detected issues in your code.",
+                                "issuetype": { "name": "Bug" },
+                                "priority": { "name": "High" }
+                              }
+                            }' \
+                            $JIRA_SITE/rest/api/2/issue/
+                            '''
                             error("SonarQube found security vulnerabilities!")
                         }
                     }
@@ -121,18 +133,16 @@ pipeline {
 
         stage('Terraform Destroy') {
             steps {
-                script {
-                    input message: 'Are you sure you want to destroy the infrastructure?', ok: 'Proceed with Destroy'
-                    withCredentials([[
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'devops253'
-                    ]]) {
-                        sh '''
-                        export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                        export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-                        terraform destroy -auto-approve
-                        '''
-                    }
+                input message: 'Are you sure you want to destroy the infrastructure?', ok: 'Proceed with Destroy'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'devops253'
+                ]]) {
+                    sh '''
+                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+                    terraform destroy -auto-approve
+                    '''
                 }
             }
         }
@@ -142,23 +152,8 @@ pipeline {
         success {
             echo 'Terraform deployment completed successfully!'
         }
-
         failure {
             echo 'Terraform deployment failed!'
         }
     }
-
-
-// Function to Create a Jira Ticket
-def createJiraTicket(String issueTitle, String issueDescription) {
-       script {
-    jiraNewIssue site: "${JIRA_SITE}",
-                 projectKey: "${JIRA_PROJECT}",
-                 issueType: "Bug",
-                 summary: "Static Code Analysis Failed",
-                 description: "SonarQube scan detected issues in your code.",
-                 priority: "High"
 }
-
-    }
-
