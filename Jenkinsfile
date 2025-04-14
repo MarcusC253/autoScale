@@ -147,16 +147,18 @@ pipeline {
             echo 'Terraform deployment failed!'
         }
     }
-}
+
 
 // Function to Create a Jira Ticket
 def createJiraTicket(String issueTitle, String issueDescription) {
-    script {
-        jiraNewIssue site: "${JIRA_SITE}",
-                     projectKey: "${JIRA_PROJECT}",
-                     issueType: "Bug",
-                     summary: issueTitle,
-                     description: issueDescription,
-                     priority: "High"
+       script {
+    jiraNewIssue site: "${JIRA_SITE}",
+                 projectKey: "${JIRA_PROJECT}",
+                 issueType: "Bug",
+                 summary: "Static Code Analysis Failed",
+                 description: "SonarQube scan detected issues in your code.",
+                 priority: "High"
+}
+
     }
 }
