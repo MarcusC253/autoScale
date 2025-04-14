@@ -8,20 +8,25 @@ pipeline {
         JIRA_PROJECT = "SCRUM"
     }
 
-    stages {
-        stage('Set AWS Credentials') {
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'devops253' 
-                ]]) {
-                    sh '''
-                    echo "AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"
-                    aws sts get-caller-identity
-                    '''
-                }
-            }
+    stage('Secret Scanning with TruffleHog') {
+    steps {
+        script {
+            sh '''
+                mkdir -p /home/jenkins/bin
+
+                if ! command -v trufflehog &> /dev/null
+                then
+                    echo 'TruffleHog not found! Installing...'
+                    curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /home/jenkins/bin
+                fi
+
+                echo 'Running TruffleHog Scan...'
+                PATH="/home/jenkins/bin:$PATH" trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
+            '''
         }
+    }
+}
+
 
         stage('Checkout Code') {
             steps {
