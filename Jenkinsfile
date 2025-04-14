@@ -6,19 +6,10 @@ pipeline {
         SONARQUBE_URL = "https://sonarcloud.io"
         JIRA_SITE = "https://derrickweil.atlassian.net"
         JIRA_PROJECT = "SCRUM"
-        PATH = "/home/jenkins/bin:$PATH" // Add custom bin path
+        PATH = "/tmp/bin:$PATH"
     }
 
     stages {
-
-        stage('Fix Permissions for Bin') {
-            steps {
-                sh '''
-                    mkdir -p /home/jenkins/bin
-                    chmod 777 /home/jenkins/bin
-                '''
-            }
-        }
 
         stage('Set AWS Credentials') {
             steps {
@@ -44,10 +35,12 @@ pipeline {
             steps {
                 script {
                     sh '''
+                        mkdir -p /tmp/bin
+
                         if ! command -v trufflehog &> /dev/null
                         then
                             echo 'TruffleHog not found! Installing...'
-                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /home/jenkins/bin
+                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /tmp/bin
                         fi
 
                         echo 'Running TruffleHog Scan...'
@@ -101,9 +94,12 @@ pipeline {
                 script {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN', variable: 'SNYK_TOKEN')]) {
                         sh '''
+                            mkdir -p /tmp/bin
+
                             if ! command -v snyk &> /dev/null; then
                                 npm install -g snyk
                             fi
+
                             snyk auth $SNYK_TOKEN
                             snyk monitor || echo 'No supported files found, monitoring skipped.'
                         '''
@@ -116,11 +112,15 @@ pipeline {
             steps {
                 script {
                     sh '''
+                        mkdir -p /tmp/bin
+
                         if ! command -v terraform &> /dev/null; then
+                            echo "Terraform not found. Installing..."
                             curl -fsSL https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip -o /tmp/terraform.zip
-                            unzip /tmp/terraform.zip -d /home/jenkins/bin
+                            unzip /tmp/terraform.zip -d /tmp/bin
                             rm /tmp/terraform.zip
                         fi
+
                         terraform init
                     '''
                 }
@@ -134,9 +134,7 @@ pipeline {
                     credentialsId: 'devops253'
                 ]]) {
                     sh '''
-                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-                    terraform plan -out=tfplan
+                        terraform plan -out=tfplan
                     '''
                 }
             }
@@ -150,9 +148,7 @@ pipeline {
                     credentialsId: 'devops253'
                 ]]) {
                     sh '''
-                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-                    terraform apply -auto-approve tfplan
+                        terraform apply -auto-approve tfplan
                     '''
                 }
             }
@@ -166,9 +162,7 @@ pipeline {
                     credentialsId: 'devops253'
                 ]]) {
                     sh '''
-                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-                    terraform destroy -auto-approve
+                        terraform destroy -auto-approve
                     '''
                 }
             }
