@@ -36,7 +36,7 @@ pipeline {
                         if ! command -v trufflehog &> /dev/null
                         then
                             echo 'TruffleHog not found! Installing...'
-                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sudo sh -s -- -b /usr/local/bin
+                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
                         fi
 
                         echo 'Running TruffleHog Scan...'
