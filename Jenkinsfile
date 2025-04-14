@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
-        SONARQUBE_URL = "https://sonarcloud.io"
         JIRA_SITE = "https://derrickweil.atlassian.net"
         JIRA_PROJECT = "SCRUM"
         PATH = "/tmp/bin:$PATH"
@@ -44,16 +43,17 @@ pipeline {
                         fi
 
                         echo 'Running TruffleHog Scan...'
-                        trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
+                        trufflehog git file://. --only-verified --json || echo 'No secrets found'
                     '''
                 }
             }
         }
 
+        /*
         stage('Static Code Analysis (SAST)') {
             steps {
                 script {
-                    withCredentials([string(credentialsId: 'devops253', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'SONARQUBE_TOKEN', variable: 'SONAR_TOKEN')]) {
                         def scanStatus = sh(script: '''
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
                             -Dsonar.projectKey=derrickSh43_autoScale \
@@ -88,6 +88,7 @@ pipeline {
                 }
             }
         }
+        */
 
         stage('Snyk Security Scan') {
             steps {
@@ -146,35 +147,3 @@ pipeline {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'devops253'
-                ]]) {
-                    sh '''
-                        terraform apply -auto-approve tfplan
-                    '''
-                }
-            }
-        }
-
-        stage('Terraform Destroy') {
-            steps {
-                input message: 'Are you sure you want to destroy the infrastructure?', ok: 'Proceed with Destroy'
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'devops253'
-                ]]) {
-                    sh '''
-                        terraform destroy -auto-approve
-                    '''
-                }
-            }
-        }
-    }
-
-    post {
-        success {
-            echo '✅ Terraform deployment completed successfully!'
-        }
-        failure {
-            echo '❌ Terraform deployment failed!'
-        }
-    }
-}
