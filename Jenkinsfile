@@ -6,9 +6,19 @@ pipeline {
         SONARQUBE_URL = "https://sonarcloud.io"
         JIRA_SITE = "https://derrickweil.atlassian.net"
         JIRA_PROJECT = "SCRUM"
+        PATH = "/home/jenkins/bin:$PATH" // Add custom bin path
     }
 
     stages {
+
+        stage('Fix Permissions for Bin') {
+            steps {
+                sh '''
+                    mkdir -p /home/jenkins/bin
+                    chmod 777 /home/jenkins/bin
+                '''
+            }
+        }
 
         stage('Set AWS Credentials') {
             steps {
@@ -34,8 +44,6 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        mkdir -p /home/jenkins/bin
-
                         if ! command -v trufflehog &> /dev/null
                         then
                             echo 'TruffleHog not found! Installing...'
@@ -43,7 +51,7 @@ pipeline {
                         fi
 
                         echo 'Running TruffleHog Scan...'
-                        PATH="/home/jenkins/bin:$PATH" trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
+                        trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
                     '''
                 }
             }
@@ -62,20 +70,25 @@ pipeline {
 
                         if (scanStatus != 0) {
                             echo "Creating Jira ticket for SAST failure..."
-                            sh '''
-                            curl -X POST -H "Content-Type: application/json" \
-                            -u $JIRA_USERNAME:$JIRA_API_TOKEN \
-                            --data '{
-                              "fields": {
-                                "project": { "key": "'"$JIRA_PROJECT"'" },
-                                "summary": "Static Code Analysis Failed",
-                                "description": "SonarQube scan detected issues in your code.",
-                                "issuetype": { "name": "Bug" },
-                                "priority": { "name": "High" }
-                              }
-                            }' \
-                            $JIRA_SITE/rest/api/2/issue/
-                            '''
+                            withCredentials([
+                                string(credentialsId: 'JIRA_USERNAME', variable: 'JIRA_USER'),
+                                string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')
+                            ]) {
+                                sh '''
+                                    curl -X POST -H "Content-Type: application/json" \
+                                    -u $JIRA_USER:$JIRA_TOKEN \
+                                    --data '{
+                                      "fields": {
+                                        "project": { "key": "'"$JIRA_PROJECT"'" },
+                                        "summary": "Static Code Analysis Failed",
+                                        "description": "SonarQube scan detected issues in your code.",
+                                        "issuetype": { "name": "Bug" },
+                                        "priority": { "name": "High" }
+                                      }
+                                    }' \
+                                    $JIRA_SITE/rest/api/2/issue/
+                                '''
+                            }
                             error("SonarQube found security vulnerabilities!")
                         }
                     }
@@ -87,8 +100,13 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN', variable: 'SNYK_TOKEN')]) {
-                        sh "snyk auth ${SNYK_TOKEN}"
-                        sh "snyk monitor || echo 'No supported files found, monitoring skipped.'"
+                        sh '''
+                            if ! command -v snyk &> /dev/null; then
+                                npm install -g snyk
+                            fi
+                            snyk auth $SNYK_TOKEN
+                            snyk monitor || echo 'No supported files found, monitoring skipped.'
+                        '''
                     }
                 }
             }
@@ -96,7 +114,16 @@ pipeline {
 
         stage('Initialize Terraform') {
             steps {
-                sh 'terraform init'
+                script {
+                    sh '''
+                        if ! command -v terraform &> /dev/null; then
+                            curl -fsSL https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip -o /tmp/terraform.zip
+                            unzip /tmp/terraform.zip -d /home/jenkins/bin
+                            rm /tmp/terraform.zip
+                        fi
+                        terraform init
+                    '''
+                }
             }
         }
 
@@ -150,10 +177,10 @@ pipeline {
 
     post {
         success {
-            echo 'Terraform deployment completed successfully!'
+            echo '✅ Terraform deployment completed successfully!'
         }
         failure {
-            echo 'Terraform deployment failed!'
+            echo '❌ Terraform deployment failed!'
         }
     }
 }
