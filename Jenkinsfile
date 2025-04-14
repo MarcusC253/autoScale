@@ -53,7 +53,7 @@ pipeline {
         stage('Static Code Analysis (SAST)') {
             steps {
                 script {
-                    withCredentials([string(credentialsId: 'SONARQUBE_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'devops253', variable: 'SONAR_TOKEN')]) {
                         def scanStatus = sh(script: '''
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
                             -Dsonar.projectKey=derrickSh43_autoScale \
