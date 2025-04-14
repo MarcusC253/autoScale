@@ -23,27 +23,7 @@ pipeline {
             }
         }
 
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main', url: 'https://github.com/MarcusC253/autoScale.git'
-            }
-        }
-            stages {
-        stage('Secret Scanning with TruffleHog') {
-            steps {
-                script {
-                    sh """
-                        # Ensure TruffleHog is installed
-                        if ! command -v trufflehog &> /dev/null
-                        then
-                            echo 'TruffleHog not found! Installing...'
-                            curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sudo sh -s -- -b /usr/local/bin
-                        fi
-
-                        # Run TruffleHog on the repository
-                        echo 'Running TruffleHog Scan...'
-                        trufflehog git --entropy=False --only-verified --json . || echo 'No secrets found'
-                    """
+       
                 }
             }
         }
